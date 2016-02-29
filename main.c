@@ -160,6 +160,14 @@ void master_accept_connection(struct ev_loop *loop, struct ev_io *w, int revents
 
 int main(int argc, char* argv[])
 {
+	// we want to be daemon
+	if (daemon(0, 0) == -1)
+	{
+		printf("daemon error, %s\n", strerror(errno));
+		exit(1);
+	}
+
+
 	char *host = 0, *port = 0, *dir = 0;
 
 	int opt;
@@ -259,7 +267,6 @@ int main(int argc, char* argv[])
 
   	// Start loop
   	ev_loop(loop, 0);
-
 
 
 	close(master_socket);
