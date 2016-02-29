@@ -3,7 +3,9 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/ioctl.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include <stdio.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -15,27 +17,28 @@
 
 ssize_t sock_fd_write(int sock, void *buf, ssize_t buflen, int fd);
 ssize_t sock_fd_read(int sock, void *buf, ssize_t bufsize, int *fd);
+int set_nonblock(int fd);
 
-
-const int WORKERS_COUNT = 4;
 
 std::map<int, bool> workers;
 
 
-void slave_cb(struct ev_loop *loop, struct ev_io *w, int revents)
+void slave_send_to_worker(struct ev_loop *loop, struct ev_io *w, int revents)
 {
-	// Get slave socket, now we can read from it
+	// get slave socket
 	int slave_socket = w->fd;
 
-	// find free worker and send this slave socket to it
+	// find a free worker and send slave socket to it
 	for(auto it = workers.begin(); it != workers.end(); it++)
 	{
 		if ((*it).second)
 		{
 			// found free worker, set it is busy
 			(*it).second = false;
-			char buf[1];
-			sock_fd_write((*it).first, buf, sizeof(buf), slave_socket);
+
+			char tmp[1];
+			sock_fd_write((*it).first, tmp, sizeof(tmp), slave_socket);
+
 			return;
 		}
 	}
@@ -44,7 +47,7 @@ void slave_cb(struct ev_loop *loop, struct ev_io *w, int revents)
 }
 
 
-void worker_cb(struct ev_loop *loop, struct ev_io *w, int revents)
+void do_work(struct ev_loop *loop, struct ev_io *w, int revents)
 {
 	// get appropriate slave socket and read from it
 	int slave_socket;
@@ -57,7 +60,7 @@ void worker_cb(struct ev_loop *loop, struct ev_io *w, int revents)
 		exit(4);
 	}
 
-	// now we can read from slave socket
+	// read from slave socket
 	char buf[1024];
 	ssize_t read_ret = read(slave_socket, buf, sizeof(buf));
 	if (read_ret == -1)
@@ -70,10 +73,23 @@ void worker_cb(struct ev_loop *loop, struct ev_io *w, int revents)
 
 
 	// write an answer to slave socket
+
+
+	// write back to paired socket to update worker status
+	char tmp[1];
+	sock_fd_write(paired_socket, tmp, sizeof(tmp), slave_socket);
 }
 
 
-int create_worker(struct ev_loop *loop)
+void set_worker_free(struct ev_loop *loop, struct ev_io *w, int revents)
+{
+	// get socket of the pair
+	int fd = w->fd;
+	workers[fd] = true;
+}
+
+
+pid_t create_worker()
 {
 	int sp[2];
 	if (socketpair(AF_LOCAL, SOCK_STREAM, 0, sp) == -1)
@@ -82,35 +98,47 @@ int create_worker(struct ev_loop *loop)
 		exit(1);
 	}
 
-	if (fork() == 0)
+  	// get default loop
+  	struct ev_loop* loop = EV_DEFAULT;
+
+	auto pid = fork();
+
+	if (pid)
 	{
-		//parent, use socket 0
+		// parent, use socket 0
 		close(sp[1]);
-		// save worker socket
+
+		// save worker socket and set free status
 		workers.insert(std::pair<int, bool>(sp[0], true));
 
-		// maybe watcher to detect the worker is free or busy, still nothing
+		// to detect the worker finished work with a socket
+		struct ev_io half_watcher;
+  		ev_init(&half_watcher, set_worker_free);
+  		ev_io_set(&half_watcher, sp[0], EV_READ);
+  		ev_io_start(loop, &half_watcher);
 	}
 	else
 	{
-		//child, use socket 1
+		// child, use socket 1
 		close(sp[0]);
 
-		// we use EVFLAG_FORKCHECK
+		// we use EVFLAG_FORKCHECK instead of
 		// ev_default_fork();
 
-		// create watcher
+		// create watcher for paired socket
 		struct ev_io worker_watcher;
-  		ev_init(&worker_watcher, worker_cb);
+  		ev_init(&worker_watcher, do_work);
   		ev_io_set(&worker_watcher, sp[1], EV_READ);
-
   		ev_io_start(loop, &worker_watcher);
+
+  		// wait for events
+  		ev_loop(loop, 0);
 	}
 
-	return 0;
+	return pid;
 }
 
-void master_cb(struct ev_loop *loop, struct ev_io *w, int revents)
+void master_accept_connection(struct ev_loop *loop, struct ev_io *w, int revents)
 {
 	// create slave socket
 	int slave_socket = accept(w->fd, 0, 0);
@@ -120,9 +148,11 @@ void master_cb(struct ev_loop *loop, struct ev_io *w, int revents)
 		exit(3);
 	}
 
-	//create wather for slave socket
+	set_nonblock(slave_socket);
+
+	// create watcher for a slave socket
 	struct ev_io slave_watcher;
-  	ev_init (&slave_watcher, slave_cb);
+  	ev_init (&slave_watcher, slave_send_to_worker);
   	ev_io_set(&slave_watcher, slave_socket, EV_READ);
   	ev_io_start(loop, &slave_watcher);
 }
@@ -155,56 +185,48 @@ int main(int argc, char* argv[])
 	if (host == 0 || port == 0 || dir == 0)
 	{
 		printf("Usage: %s -h <host> -p <port> -d <folder>\n", argv[0]);
-		exit(1); 
+		exit(1);
 	}
+
 
 	//printf("%s %s %s\n", host, port, dir);
 	//exit(0);
+
+
+	//--------------------------------------------------------------------//
 
 
 	// Our event loop
 	struct ev_loop *loop = ev_default_loop(EVFLAG_FORKCHECK);
 
 
-	//---------------- Create workers --------------------//
+	//---------------- Create 2 workers --------------------//
 
-	create_worker(loop);
+	if (create_worker() == 0)
+	{
+		// worker 1 process
+		printf("Worker 1 is about to return\n");
+		return 0;
+	}
 
+	if (create_worker() == 0)
+	{
+		// worker 2 process
+		printf("Worker 2 is about to return\n");
+		return 0;
+	}
 
-
-
-
-
-
-
-	//----------------------------------------------------//
+	//------------------------------------------------------//
 
 
 	// Master socket, think non-blocking
-	int master_socket = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+	int master_socket = socket(AF_INET, SOCK_STREAM, 0);
 	if (master_socket == -1)
 	{
 		printf("socket error, %s\n", strerror(errno));
 		exit(1);
 	}
-
-
-
-
-
-	// Master watcher
-	struct ev_io master_watcher;
-  	ev_init (&master_watcher, master_cb);
-  	ev_io_set(&master_watcher, master_socket, EV_READ);
-  	ev_io_start(loop, &master_watcher);
-  	
-
-
-  	// Start loop
-  	ev_loop(loop, 0);
-
-
-
+	set_nonblock(master_socket);
 
 	struct sockaddr_in addr;
 	addr.sin_family = AF_INET;
@@ -212,7 +234,7 @@ int main(int argc, char* argv[])
 
 	//printf("Port: %d\n", atoi(port));
 
-	if (inet_aton(host, &addr.sin_addr.s_addr) == 0)
+	if (inet_pton(AF_INET, host, &(addr.sin_addr.s_addr)) != 1)
 	{
 		printf("inet_aton error\n");
 		exit(2);
@@ -225,17 +247,19 @@ int main(int argc, char* argv[])
 	}
 
 
-
 	listen(master_socket, SOMAXCONN);
 
 
+	// Master watcher
+	struct ev_io master_watcher;
+  	ev_init (&master_watcher, master_accept_connection);
+  	ev_io_set(&master_watcher, master_socket, EV_READ);
+  	ev_io_start(loop, &master_watcher);
 
 
+  	// Start loop
+  	ev_loop(loop, 0);
 
-
-
-
-	// create workers
 
 
 	close(master_socket);
@@ -343,3 +367,15 @@ sock_fd_read(int sock, void *buf, ssize_t bufsize, int *fd)
     return size;
 }
 
+int set_nonblock(int fd)
+{
+	int flags;
+#if defined(O_NONBLOCK)
+	if (-1 == (flags = fcntl(fd, F_GETFL, 0)))
+		flags = 0;
+	return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+#else
+	flags = 1;
+	return ioctl(fd, FIONBIO, &flags);
+#endif
+}
