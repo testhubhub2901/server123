@@ -1,6 +1,5 @@
 #include <iostream>
 #include <map>
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
@@ -11,7 +10,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
 #include <ev.h>
 
 
@@ -38,10 +36,10 @@ void extract_path_from_http_get_request(std::string& path, const char* buf, ssiz
 
 void slave_send_to_worker(struct ev_loop *loop, struct ev_io *w, int revents)
 {
-	std::cout << "slave_send_to_worker" << std::endl;
-
 	// get slave socket
 	int slave_socket = w->fd;
+
+	std::cout << "slave_send_to_worker: got slave socket " << slave_socket << std::endl;
 
 	// find a free worker and send slave socket to it
 	for(auto it = workers.begin(); it != workers.end(); it++)
@@ -54,56 +52,66 @@ void slave_send_to_worker(struct ev_loop *loop, struct ev_io *w, int revents)
 			char tmp[1];
 			sock_fd_write((*it).first, tmp, sizeof(tmp), slave_socket);
 
-			std::cout << "slave_send_to_worker " << slave_socket << std::endl;
-
+			std::cout << "slave_send_to_worker: sent slave socket " << slave_socket << " to worker" << std::endl;
 			return;
 		}
 	}
 
-	// no free workers, still so
+	std::cout << "slave_send_to_worker: no free workers" << std::endl;
+	// add to queue
 }
 
 
 void do_work(struct ev_loop *loop, struct ev_io *w, int revents)
 {
+	std::cout << "do_work: from socket " << w->fd << std::endl;
+
 	// get appropriate slave socket and read from it
 	int slave_socket;
 	char tmp[1];
 
-	int paired_socket = w->fd;
-	sock_fd_read(paired_socket, tmp, sizeof(tmp), &slave_socket);
+	sock_fd_read(w->fd, tmp, sizeof(tmp), &slave_socket);
 	if (slave_socket == -1)
 	{
+		std::cout << "do_work: slave_socket == -1" << std::endl;
 		exit(4);
 	}
 
-	// read from slave socket
+	std::cout << "do_work: got slave socket " << slave_socket << std::endl;
 
-	char buf[4096];
-	ssize_t read_ret = read(slave_socket, buf, sizeof(buf));
-	if (read_ret == -1)
+	// recv from slave socket
+
+	char buf[1024];
+	ssize_t recv_ret = recv(slave_socket, buf, sizeof(buf), MSG_NOSIGNAL);
+	if (recv_ret == -1)
 	{
-		// process error
+		std::cout << "do_work: recv return -1" << std::endl;
 		return;
 	}
 
-	std::cout << buf << std::endl;
+	std::cout << "do_work: recv return " << recv_ret << std::endl;
 
-
+	//std::cout << buf << std::endl;
 	// process http request
 	//std::string path;
 	//extract_path_from_http_get_request(path, buf, read_ret);
-
 	// if path exists open and read file
 
-
 	// write an answer to slave socket
-	char reply_404[] = "HTTP/1.0 404 NOT FOUND\r\nContent-Type: text/html\r\n\r\n";
+	char reply_404[] = "HTTP/1.1 404 NOT FOUND\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n";
 
-	write(slave_socket, reply_404, strlen(reply_404));
+	ssize_t send_ret = send(slave_socket, reply_404, strlen(reply_404), MSG_NOSIGNAL);
+	if (send_ret == -1)
+	{
+		std::cout << "do_work: send return -1" << std::endl;
+		return;
+	}
+
+	std::cout << "do_work: send return " << send_ret << std::endl;
 
 	// write back to paired socket to update worker status
-	sock_fd_write(paired_socket, tmp, sizeof(tmp), slave_socket);
+	sock_fd_write(w->fd, tmp, sizeof(tmp), slave_socket);
+	std::cout << "do_work: sent slave socket " << slave_socket << std::endl;
 }
 
 
@@ -111,15 +119,16 @@ void set_worker_free(struct ev_loop *loop, struct ev_io *w, int revents)
 {
 	// get socket of the pair
 	int fd = w->fd;
+
 	char tmp[1];
 	int slave_socket;
+
 	sock_fd_read(fd, tmp, sizeof(tmp), &slave_socket);
+	std::cout << "set_worker_free: got slave socket " << slave_socket << std::endl;
 
 	workers[fd] = true;
-
-	std::cout << "set_worker_free" << std::endl;
+	std::cout << "set_worker_free: worker associated with paired socket " << fd << " is free now" << std::endl;
 }
-
 
 pid_t create_worker()
 {
@@ -144,11 +153,12 @@ pid_t create_worker()
 		workers.insert(std::pair<int, bool>(sp[0], true));
 
 		// to detect the worker finished work with a socket
-		struct ev_io half_watcher;
-  		ev_init(&half_watcher, set_worker_free);
-  		ev_io_set(&half_watcher, sp[0], EV_READ);
-  		ev_io_start(loop, &half_watcher);
-  		//ev_loop(loop, 0);
+		struct ev_io* half_watcher = new ev_io;
+  		ev_init(half_watcher, set_worker_free);
+  		ev_io_set(half_watcher, sp[0], EV_READ);
+  		ev_io_start(loop, half_watcher);
+
+  		std::cout << "Worker with pid " << std::to_string(pid) << " associated with socket " << std::to_string(sp[0]) << " in parent" << std::endl;
 	}
 	else
 	{
@@ -164,7 +174,9 @@ pid_t create_worker()
   		ev_io_set(&worker_watcher, sp[1], EV_READ);
   		ev_io_start(loop, &worker_watcher);
 
-  		// wait for events
+		std::cout << "Worker associated with socket " << std::to_string(sp[1]) << " in child" << std::endl;
+
+  		// wait for events, run loop in a child
   		ev_loop(loop, 0);
 	}
 
@@ -184,13 +196,12 @@ void master_accept_connection(struct ev_loop *loop, struct ev_io *w, int revents
 	set_nonblock(slave_socket);
 
 	// create watcher for a slave socket
-	struct ev_io slave_watcher;
-  	ev_init(&slave_watcher, slave_send_to_worker);
-  	ev_io_set(&slave_watcher, slave_socket, EV_READ);
-  	ev_io_start(loop, &slave_watcher);
+	struct ev_io* slave_watcher = new ev_io;
+  	ev_init(slave_watcher, slave_send_to_worker);
+  	ev_io_set(slave_watcher, slave_socket, EV_READ);
+  	ev_io_start(loop, slave_watcher);
 
-  	ev_loop(loop, 0);
-	std::cout << "master_accept_connection, slave socket is " << slave_socket << std::endl;
+	std::cout << "master_accept_connection: slave socket is " << slave_socket << std::endl;
 }
 
 
@@ -205,7 +216,7 @@ int main(int argc, char* argv[])
 	}
 	*/
 
-	std::cout << "main" << std::endl;
+	std::cout << "main begin, parent pid is " << getpid() << std::endl;
 
 	char *host = 0, *port = 0, *dir = 0;
 
@@ -249,48 +260,6 @@ int main(int argc, char* argv[])
 
 	//---------------- Create 2 workers --------------------//
 
-	int sp[2];
-	if (socketpair(AF_LOCAL, SOCK_STREAM, 0, sp) == -1)
-	{
-		printf("socketpair error, %s\n", strerror(errno));
-		exit(1);
-	}
-
-	auto pid = fork();
-
-	if (pid)
-	{
-		// parent, use socket 0
-		close(sp[1]);
-
-		// save worker socket and set free status
-		workers.insert(std::pair<int, bool>(sp[0], true));
-
-		// to detect the worker finished work with a socket
-		struct ev_io half_watcher;
-  		ev_init(&half_watcher, set_worker_free);
-  		ev_io_set(&half_watcher, sp[0], EV_READ);
-  		ev_io_start(loop, &half_watcher);
-	}
-	else
-	{
-		// child, use socket 1
-		close(sp[0]);
-
-		// we use EVFLAG_FORKCHECK instead of
-		// ev_default_fork();
-
-		// create watcher for paired socket
-		struct ev_io worker_watcher;
-  		ev_init(&worker_watcher, do_work);
-  		ev_io_set(&worker_watcher, sp[1], EV_READ);
-  		ev_io_start(loop, &worker_watcher);
-
-  		// wait for events
-  		ev_loop(loop, 0);
-	}
-
-	/*
 	if (create_worker() == 0)
 	{
 		// worker 1 process
@@ -298,6 +267,7 @@ int main(int argc, char* argv[])
 		return 0;
 	}
 
+	/*
 	if (create_worker() == 0)
 	{
 		// worker 2 process
@@ -339,6 +309,9 @@ int main(int argc, char* argv[])
 	listen(master_socket, SOMAXCONN);
 
 
+	std::cout << "master socket is " << master_socket << std::endl;
+
+
 	// Master watcher
 	struct ev_io master_watcher;
   	ev_init (&master_watcher, master_accept_connection);
@@ -348,7 +321,6 @@ int main(int argc, char* argv[])
 
   	// Start loop
   	ev_loop(loop, 0);
-
 
 	close(master_socket);
 
