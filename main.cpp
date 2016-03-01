@@ -26,7 +26,7 @@ ssize_t sock_fd_write(int sock, void *buf, ssize_t buflen, int fd);
 // recv fd
 ssize_t sock_fd_read(int sock, void *buf, ssize_t bufsize, int *fd);
 
-// set nonblock dedcriptor
+// set nonblock mode for a descriptor
 int set_nonblock(int fd);
 
 // Workers storage: socket and status (is it free (true) or not (false))
