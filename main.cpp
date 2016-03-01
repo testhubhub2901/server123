@@ -312,13 +312,13 @@ void master_accept_connection(struct ev_loop *loop, struct ev_io *w, int revents
 int main(int argc, char* argv[])
 {
 	// we want to be daemon
-	/*
+
 	if (daemon(0, 0) == -1)
 	{
 		printf("daemon error, %s\n", strerror(errno));
 		exit(1);
 	}
-	*/
+
 
 	locker = new sem_t;
 	sem_init(locker, 1, 1);
