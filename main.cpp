@@ -1,6 +1,11 @@
 #include <iostream>
 #include <map>
+#include <list>
+#include <semaphore.h>
 #include <sys/types.h>
+#include <sys/sendfile.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <netinet/in.h>
@@ -13,22 +18,62 @@
 #include <ev.h>
 
 
+char* DIR;
+
 ssize_t sock_fd_write(int sock, void *buf, ssize_t buflen, int fd);
 ssize_t sock_fd_read(int sock, void *buf, ssize_t bufsize, int *fd);
 int set_nonblock(int fd);
 
 
 std::map<int, bool> workers;
+std::list<int> ready_read_sockets;
 
+// Semaphore to sync access to ready_read_sockets
+// betwenn forked processes
+sem_t* locker;
+
+int safe_pop_front()
+{
+	// return -1, if ready_read_sockets is empty
+	int fd;
+
+	sem_wait(locker);
+
+	if (ready_read_sockets.empty())
+	{
+		fd = -1;
+	}
+	else
+	{
+		fd = *ready_read_sockets.cbegin();
+		ready_read_sockets.pop_front();
+	}
+
+	sem_post(locker);
+
+	return fd;
+}
+
+void safe_push_back(int fd)
+{
+	sem_wait(locker);
+	ready_read_sockets.push_back(fd);
+	sem_post(locker);
+}
 
 void extract_path_from_http_get_request(std::string& path, const char* buf, ssize_t len)
 {
 	std::string request(buf, len);
-	std::string s1("GET ");
-	std::string s2(" HTTP/1.0");
+	std::string s1(" ");
+	std::string s2("?");
 
-	std::size_t pos1 = request.find(s1);
-	std::size_t pos2 = request.find(s2);
+	std::size_t pos1 = 4;
+
+	std::size_t pos2 = request.find(s2, 4);
+	if (pos2 == std::string::npos)
+	{
+		pos2 = request.find(s1, 4);
+	}
 
 	path = request.substr(4, pos2 - 4);
 }
@@ -38,6 +83,9 @@ void slave_send_to_worker(struct ev_loop *loop, struct ev_io *w, int revents)
 {
 	// get slave socket
 	int slave_socket = w->fd;
+
+	// think we should stop watcher
+	ev_io_stop(loop, w);
 
 	std::cout << "slave_send_to_worker: got slave socket " << slave_socket << std::endl;
 
@@ -57,10 +105,85 @@ void slave_send_to_worker(struct ev_loop *loop, struct ev_io *w, int revents)
 		}
 	}
 
-	std::cout << "slave_send_to_worker: no free workers" << std::endl;
+	std::cout << "slave_send_to_worker: no free workers, so call safe_push_back(" << slave_socket << ")" << std::endl;
 	// add to queue
+	safe_push_back(slave_socket);
 }
 
+void process_slave_socket(int slave_socket)
+{
+	// recv from slave socket
+	char buf[1024];
+	ssize_t recv_ret = recv(slave_socket, buf, sizeof(buf), MSG_NOSIGNAL);
+	if (recv_ret == -1)
+	{
+		std::cout << "do_work: recv return -1" << std::endl;
+		return;
+	}
+
+	std::cout << "do_work: recv return " << recv_ret << std::endl;
+
+	std::cout << "======= received message =========" << std::endl;
+	std::cout << buf << std::endl;
+	std::cout << "==================================" << std::endl;
+
+	//std::cout << buf << std::endl;
+	// process http request
+	std::string path;
+	extract_path_from_http_get_request(path, buf, recv_ret);
+
+	// if path exists open and read file
+	std::string full_path = std::string(DIR) + path;
+	std::cout << "============ full path ===========" << std::endl;
+	std::cout << full_path << std::endl;
+	std::cout << "==================================" << std::endl;	
+
+
+	char reply[1024];
+	if (access(full_path.c_str(), F_OK) != -1)
+	{
+		// get size of file
+		int fd = open(full_path.c_str(), O_RDONLY);
+		int sz = lseek(fd, 0, SEEK_END);;
+
+		sprintf(reply,
+					"HTTP/1.1 200 OK\r\n"
+					"Content-Type: text/html\r\n"
+					"Content-length: %d\r\n"
+					"Connection: close\r\n"
+					"\r\n", sz);
+
+		ssize_t send_ret = send(slave_socket, reply, strlen(reply), MSG_NOSIGNAL);
+		std::cout << "do_work: send return " << send_ret << std::endl;
+
+		off_t offset = 0;
+		while (offset < sz)
+		{
+			offset = sendfile(slave_socket, fd, &offset, sz - offset);
+		}
+
+		close(fd);
+	}
+	else
+	{
+		strcpy(reply, "HTTP/1.1 404 Not Found\r\n"
+					  "Content-Type: text/html\r\n"
+					  "Content-length: 107\r\n"
+					  "Connection: close\r\n"
+					  "\r\n");
+
+		ssize_t send_ret = send(slave_socket, reply, strlen(reply), MSG_NOSIGNAL);
+		std::cout << "do_work: send return " << send_ret << std::endl;
+
+		strcpy(reply, "<html>\n<head>\n<title>Not Found</title>\n</head>\r\n");
+	    send_ret = send(slave_socket, reply, strlen(reply), MSG_NOSIGNAL);
+		std::cout << "do_work: send return " << send_ret << std::endl;
+
+	    strcpy(reply, "<body>\n<p>404 Request file not found.</p>\n</body>\n</html>\r\n");
+	    send_ret = send(slave_socket, reply, strlen(reply), MSG_NOSIGNAL);
+		std::cout << "do_work: send return " << send_ret << std::endl;		
+	}
+}
 
 void do_work(struct ev_loop *loop, struct ev_io *w, int revents)
 {
@@ -79,35 +202,8 @@ void do_work(struct ev_loop *loop, struct ev_io *w, int revents)
 
 	std::cout << "do_work: got slave socket " << slave_socket << std::endl;
 
-	// recv from slave socket
-
-	char buf[1024];
-	ssize_t recv_ret = recv(slave_socket, buf, sizeof(buf), MSG_NOSIGNAL);
-	if (recv_ret == -1)
-	{
-		std::cout << "do_work: recv return -1" << std::endl;
-		return;
-	}
-
-	std::cout << "do_work: recv return " << recv_ret << std::endl;
-
-	//std::cout << buf << std::endl;
-	// process http request
-	//std::string path;
-	//extract_path_from_http_get_request(path, buf, read_ret);
-	// if path exists open and read file
-
-	// write an answer to slave socket
-	char reply_404[] = "HTTP/1.1 404 NOT FOUND\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n";
-
-	ssize_t send_ret = send(slave_socket, reply_404, strlen(reply_404), MSG_NOSIGNAL);
-	if (send_ret == -1)
-	{
-		std::cout << "do_work: send return -1" << std::endl;
-		return;
-	}
-
-	std::cout << "do_work: send return " << send_ret << std::endl;
+	// do it
+	process_slave_socket(slave_socket);
 
 	// write back to paired socket to update worker status
 	sock_fd_write(w->fd, tmp, sizeof(tmp), slave_socket);
@@ -125,6 +221,14 @@ void set_worker_free(struct ev_loop *loop, struct ev_io *w, int revents)
 
 	sock_fd_read(fd, tmp, sizeof(tmp), &slave_socket);
 	std::cout << "set_worker_free: got slave socket " << slave_socket << std::endl;
+
+	// here we can restore watcher for the slave socket
+
+	// complete all the work from the queue
+	while ((slave_socket = safe_pop_front()) != -1)
+	{
+		process_slave_socket(slave_socket);
+	}
 
 	workers[fd] = true;
 	std::cout << "set_worker_free: worker associated with paired socket " << fd << " is free now" << std::endl;
@@ -216,6 +320,9 @@ int main(int argc, char* argv[])
 	}
 	*/
 
+	locker = new sem_t;
+	sem_init(locker, 1, 1);
+
 	std::cout << "main begin, parent pid is " << getpid() << std::endl;
 
 	char *host = 0, *port = 0, *dir = 0;
@@ -247,6 +354,9 @@ int main(int argc, char* argv[])
 	}
 
 
+	DIR = dir;
+
+
 	//printf("%s %s %s\n", host, port, dir);
 	//exit(0);
 
@@ -267,14 +377,21 @@ int main(int argc, char* argv[])
 		return 0;
 	}
 
-	/*
+
 	if (create_worker() == 0)
 	{
 		// worker 2 process
 		printf("Worker 2 is about to return\n");
 		return 0;
 	}
-	*/
+
+	if (create_worker() == 0)
+	{
+		// worker 3 process
+		printf("Worker 3 is about to return\n");
+		return 0;
+	}
+
 	//------------------------------------------------------//
 
 
