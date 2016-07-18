@@ -249,9 +249,10 @@ if( ( pid = fork() ) == 0 )
                                            epoll_events_count,
                                            (double)(clock() - tStart)/CLOCKS_PER_SEC);
 
+
+    }
        close(listener);
        close(epfd);
-    }
 }
        return 0;
    }
