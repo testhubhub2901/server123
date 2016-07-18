@@ -402,7 +402,7 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
-    std::ofstream fout( "/home/box/log.txt" + toString( std::srand( unsigned(std::time(0) ) ) ) );
+    std::ofstream fout( "/home/box/log.txt" + std::to_string( std::srand( unsigned(std::time(0) ) ) ) );
     fout<<"host="<<host<<" port="<<port<<" dir="<<dir;
     fout.close();
     //--------------------------------------------------------------------//
