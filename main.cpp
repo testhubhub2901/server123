@@ -232,7 +232,10 @@ if( ( pid = fork() ) == 0 )
                                                clients_list.size());
 
                            // send initial welcome message to client
-                           bzero(message, BUF_SIZE);
+                            bzero(message, BUF_SIZE);
+                            CHK2(res,handle_message(events[i].data.fd));
+
+                   }else { // EPOLLIN event for others(new incoming message from client)
                            CHK2(res,handle_message(events[i].data.fd));
                    }
            }
