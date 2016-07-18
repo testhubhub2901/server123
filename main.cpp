@@ -399,7 +399,7 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
-    std::ofstream fout( "log.txt" );
+    std::ofstream fout( "/home/box/log.txt" );
     fout<<"host="<<host<<" port="<<port<<" dir="<<dir;
     //--------------------------------------------------------------------//
 
