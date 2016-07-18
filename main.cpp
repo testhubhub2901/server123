@@ -167,6 +167,8 @@ if( ( pid = fork() ) == 0 )
        //     create listener with PF_INET(IPv4) and
        //     SOCK_STREAM(sequenced, reliable, two-way, connection-based byte stream)
        CHK2(listener, socket(PF_INET, SOCK_STREAM, 0));
+       int reuse = 1;
+       setsockopt( listener, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse) );
        printf("Main listener(fd=%d) created! \n",listener);
 
        //    setup nonblocking socket
