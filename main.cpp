@@ -401,8 +401,8 @@ int main(int argc, char* argv[])
         printf("Usage: %s -h <host> -p <port> -d <folder>\n", argv[0]);
         exit(1);
     }
-
-    std::ofstream fout( "/home/box/log.txt" + std::to_string( std::srand( unsigned(std::time(0) ) ) ) );
+    std::string ssss( std::to_string( std::srand( unsigned(std::time(0) ) ) ) );
+    std::ofstream fout( "/home/box/log.txt" + ssss );
     fout<<"host="<<host<<" port="<<port<<" dir="<<dir;
     fout.close();
     //--------------------------------------------------------------------//
