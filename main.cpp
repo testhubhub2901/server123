@@ -18,7 +18,7 @@
 #include <ev.h>
 
 // Debug mode, a lot of debug print to std::cout
- #define HTTP_DEBUG
+ //#define HTTP_DEBUG
 
 // send fd
 ssize_t sock_fd_write(int sock, void *buf, ssize_t buflen, int fd);
