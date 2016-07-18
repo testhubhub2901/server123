@@ -1,4 +1,4 @@
-project(final1)
+project(final)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
 set(SRC_LIST main.cpp)
