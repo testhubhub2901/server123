@@ -22,7 +22,6 @@ char *host = 0, *port = 0, *dir = 0;
   // Default buffer size
   #define BUF_SIZE 1024
 
-
   // Default timeout - http://linux.die.net/man/2/epoll_wait
   #define EPOLL_RUN_TIMEOUT -1
 
@@ -84,7 +83,7 @@ int setnonblocking(int sockfd)
    list<int> clients_list;
 
    // for debug mode
-   int DEBUG_MODE = 0;
+   int DEBUG_MODE = -1;
 
    int main(int argc, char *argv[])
    {
@@ -233,9 +232,9 @@ if( ( pid = fork() ) == 0 )
                                                clients_list.size());
 
                            // send initial welcome message to client
-                           bzero(message, BUF_SIZE);
+                           /*bzero(message, BUF_SIZE);
                            res = sprintf(message, STR_WELCOME, client);
-                           CHK2(res, send(client, message, BUF_SIZE, 0));
+                           CHK2(res, send(client, message, BUF_SIZE, 0));*/
 
                    }else { // EPOLLIN event for others(new incoming message from client)
                            CHK2(res,handle_message(events[i].data.fd));
