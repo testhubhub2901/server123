@@ -200,6 +200,7 @@ if( ( pid = fork() ) == 0 )
        // *** Main cycle(epoll_wait)
        while(1)
        {
+           
            CHK2(epoll_events_count,epoll_wait(epfd, events, EPOLL_SIZE, EPOLL_RUN_TIMEOUT));
            if(DEBUG_MODE) printf("Epoll events count: %d\n", epoll_events_count);
            // setup tStart time
@@ -209,8 +210,8 @@ if( ( pid = fork() ) == 0 )
            {
                    if(DEBUG_MODE){
                            printf("events[%d].data.fd = %d\n", i, events[i].data.fd);
-                           //debug_epoll_event(events[i]);
-
+                           debug_epoll_event(events[i]);
+    
                    }
                    // EPOLLIN event for listener(new client connection)
                    if(events[i].data.fd == listener)
@@ -231,15 +232,14 @@ if( ( pid = fork() ) == 0 )
 
                            // save new descriptor to further use
                            clients_list.push_back(client); // add new connection to list of clients
-                           if(DEBUG_MODE) printf("Add new client(fd = %d) to epoll and now clients_list.size = %d\n",
-                                               client,
+                           if(DEBUG_MODE) printf("Add new client(fd = %d) to epoll and now clients_list.size = %d\n", 
+                                               client,  
                                                clients_list.size());
 
                            // send initial welcome message to client
-                            //bzero(message, BUF_SIZE);
-                           /*res = sprintf(message, STR_WELCOME, client);
-                           CHK2(res, send(client, message, BUF_SIZE, 0));*/
-                            CHK2(res,handle_message(client));
+                           bzero(message, BUF_SIZE);
+                           res = sprintf(message, STR_WELCOME, client);
+                           CHK2(res, send(client, message, BUF_SIZE, 0));
 
                    }else { // EPOLLIN event for others(new incoming message from client)
                            CHK2(res,handle_message(events[i].data.fd));
@@ -249,7 +249,6 @@ if( ( pid = fork() ) == 0 )
            printf("Statistics: %d events handled at: %.2f second(s)\n",
                                            epoll_events_count,
                                            (double)(clock() - tStart)/CLOCKS_PER_SEC);
-       }
 
        close(listener);
        close(epfd);
@@ -261,84 +260,47 @@ if( ( pid = fork() ) == 0 )
    int handle_message(int client)
    {
        // get row message from client(buf)
-       //     and format message to populate(message)
-       char buf[BUF_SIZE], message[BUF_SIZE];
-       bzero(buf, BUF_SIZE);
-       bzero(message, BUF_SIZE);
-
-       // to keep different results
-       int len;
-
-       // try to get new raw message from client
-       if(DEBUG_MODE) printf("Try to read from fd(%d)\n", client);
-       CHK2(len,recv(client, buf, BUF_SIZE, 0));
-       std::string path;
-       extract_path_from_http_get_request(path, buf, len);
-
-       std::string full_path = std::string(dir) + path;
-       char reply[1024];
-
-       // zero size of len mean the client closed connection
-       /*if(len == 0){
-           CHK(close(client));
-           clients_list.remove(client);
-           if(DEBUG_MODE) printf("Client with fd: %d closed! And now clients_list.size = %d\n", client, clients_list.size());
-       // populate message around the world
-       }else{
-
-           if(clients_list.size() == 1) { // this means that noone connected to server except YOU!
-                   CHK(send(client, STR_NOONE_CONNECTED, strlen(STR_NOONE_CONNECTED), 0));
-                   return len;
-           }*/
-
-           // format message to populate
-           //sprintf(message, STR_MESSAGE, client, buf);
-
-           // populate message around the world ;-)...
-           /*list<int>::iterator it;
-           for(it = clients_list.begin(); it != clients_list.end(); it++){*/
-              //if(*it != client){ // ... except youself of course
-                   //CHK(send(*it, message, BUF_SIZE, 0));
-                   if (access(full_path.c_str(), F_OK) != -1)
-                   {
-                       int fd = open(full_path.c_str(), O_RDONLY);
-                       int sz = lseek(fd, 0, SEEK_END);;
-
-                       sprintf(reply, "HTTP/1.1 200 OK\r\n"
-                                      "Content-Type: text/html\r\n"
-                                      "Content-length: %d\r\n"
-                                      "\r\n", sz);
-
-                       ssize_t send_ret = send(client, reply, strlen(reply), 0);
-
-                       off_t offset = 0;
-                       while (offset < sz)
-                       {
-                           offset = sendfile(client, fd, &offset, sz - offset);
-                       }
-
-                       close(fd);
-                   }
-                   else
-                   {
-                       strcpy(reply, "HTTP/1.1 404 Not Found\r\n"
-                                     "Content-Type: text/html\r\n"
-                                     "Content-length: 0\r\n"
-                                     "\r\n\r\n");
-
-                       ssize_t send_ret = send(client, reply, strlen(reply), 0);
-                       strcpy(reply, "HTTP/1.1 404 Not Found\r\n"
-                                     "Content-Type: text/html\r\n"
-                                     "Content-length: 0\r\n"
-                                     "\r\n\r\n");
-                       send_ret = send(client, reply, strlen(reply), 0);
-                   }
-           //}
-           /*if(DEBUG_MODE) printf("Client(%d) received message successfully:'%s', a total of %d bytes data...\n",
-                client,
-                buf,
-                len);
-       }*/
-
-       return len;
+              //     and format message to populate(message)
+              char buf[BUF_SIZE], message[BUF_SIZE];
+              bzero(buf, BUF_SIZE);
+              bzero(message, BUF_SIZE);
+       
+              // to keep different results
+              int len;
+       
+              // try to get new raw message from client
+              if(DEBUG_MODE) printf("Try to read from fd(%d)\n", client);
+              CHK2(len,recv(client, buf, BUF_SIZE, 0));
+       
+              // zero size of len mean the client closed connection
+              if(len == 0){
+                  CHK(close(client));
+                  clients_list.remove(client);
+                  if(DEBUG_MODE) printf("Client with fd: %d closed! And now clients_list.size = %d\n", client, clients_list.size());
+              // populate message around the world
+              }else{
+       
+                  if(clients_list.size() == 1) { // this means that noone connected to server except YOU!
+                          CHK(send(client, STR_NOONE_CONNECTED, strlen(STR_NOONE_CONNECTED), 0));
+                          return len;
+                  }
+                 
+                  // format message to populate
+                  sprintf(message, STR_MESSAGE, client, buf);
+       
+                  // populate message around the world ;-)...
+                  list<int>::iterator it;
+                  for(it = clients_list.begin(); it != clients_list.end(); it++){
+                     if(*it != client){ // ... except youself of course
+                          CHK(send(*it, message, BUF_SIZE, 0));
+                          if(DEBUG_MODE) printf("Message '%s' send to client with fd(%d) \n", message, *it);
+                     }
+                  }
+                  if(DEBUG_MODE) printf("Client(%d) received message successfully:'%s', a total of %d bytes data...\n",
+                       client,
+                       buf,
+                       len);
+              }
+       
+              return len;
    }
