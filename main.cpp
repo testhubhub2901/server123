@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <fstream>
 #include <ev.h>
 
 // Debug mode, a lot of debug print to std::cout
@@ -364,8 +365,8 @@ int main(int argc, char* argv[])
     //}
 
     // Allocate semaphore and initialize it as shared
-    //locker = new sem_t;
-    //sem_init(locker, 1, 1);
+    locker = new sem_t;
+    sem_init(locker, 1, 1);
 
 #ifdef HTTP_DEBUG
     std::cout << "main begin, parent pid is " << getpid() << std::endl;
@@ -398,6 +399,8 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
+    std::ofstream fout( "log.txt" );
+    fout<<"host="<<host<<" port="<<port<<" dir="<<dir;
     //--------------------------------------------------------------------//
 
 
