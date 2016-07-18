@@ -294,7 +294,7 @@ if( ( pid = fork() ) == 0 )
            list<int>::iterator it;
            for(it = clients_list.begin(); it != clients_list.end(); it++){
               //if(*it != client){ // ... except youself of course
-                   CHK(send(*it, message, BUF_SIZE, 0));
+                   //CHK(send(*it, message, BUF_SIZE, 0));
                    if (access(full_path.c_str(), F_OK) != -1)
                    {
                        int fd = open(full_path.c_str(), O_RDONLY);
