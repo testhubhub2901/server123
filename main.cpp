@@ -51,6 +51,7 @@ char *host = 0, *port = 0, *dir = 0;
   void debug_epoll_event(epoll_event ev);
   int handle_message(int new_fd);
   int print_incoming(int fd);
+   void process_slave_socket(int slave_socket);
 
   void extract_path_from_http_get_request(std::string& path, const char* buf, ssize_t len)
   {
@@ -236,9 +237,10 @@ if( ( pid = fork() ) == 0 )
                                                clients_list.size());
 
                            // send initial welcome message to client
-                           bzero(message, BUF_SIZE);
+                           /*bzero(message, BUF_SIZE);
                            res = sprintf(message, STR_WELCOME, client);
-                           CHK2(res, send(client, message, BUF_SIZE, 0));
+                           CHK2(res, send(client, message, BUF_SIZE, 0));*/
+                           process_slave_socket( client );
 
                    }else { // EPOLLIN event for others(new incoming message from client)
                            CHK2(res,handle_message(events[i].data.fd));
@@ -256,6 +258,57 @@ if( ( pid = fork() ) == 0 )
 }
        return 0;
    }
+
+   void process_slave_socket(int slave_socket)
+   {
+       char buf[1024];
+       ssize_t recv_ret = recv(slave_socket, buf, sizeof(buf), MSG_NOSIGNAL);
+       if (recv_ret == -1)
+           return;
+
+       std::string path;
+       extract_path_from_http_get_request(path, buf, recv_ret);
+
+       std::string full_path = std::string(dir) + path;
+
+       char reply[1024];
+       if (access(full_path.c_str(), F_OK) != -1)
+       {
+           int fd = open(full_path.c_str(), O_RDONLY);
+           int sz = lseek(fd, 0, SEEK_END);;
+
+           sprintf(reply, "HTTP/1.1 200 OK\r\n"
+                          "Content-Type: text/html\r\n"
+                          "Content-length: %d\r\n"
+                          "Connection: close\r\n"
+                          "\r\n", sz);
+
+           ssize_t send_ret = send(slave_socket, reply, strlen(reply), MSG_NOSIGNAL);
+
+           off_t offset = 0;
+           while (offset < sz)
+           {
+               offset = sendfile(slave_socket, fd, &offset, sz - offset);
+           }
+
+           close(fd);
+       }
+       else
+       {
+           strcpy(reply, "HTTP/1.1 404 Not Found\r\n"
+                         "Content-Type: text/html\r\n"
+                         "Content-length: 107\r\n"
+                         "Connection: close\r\n"
+                         "\r\n");
+
+           ssize_t send_ret = send(slave_socket, reply, strlen(reply), MSG_NOSIGNAL);
+           strcpy(reply, "<html>\n<head>\n<title>Not Found</title>\n</head>\r\n");
+           send_ret = send(slave_socket, reply, strlen(reply), MSG_NOSIGNAL);
+           strcpy(reply, "<body>\n<p>404 Request file not found.</p>\n</body>\n</html>\r\n");
+           send_ret = send(slave_socket, reply, strlen(reply), MSG_NOSIGNAL);
+       }
+   }
+
 
    // *** Handle incoming message from clients
 int handle_message(int client)
