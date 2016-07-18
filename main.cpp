@@ -246,10 +246,9 @@ if( ( pid = fork() ) == 0 )
                                            (double)(clock() - tStart)/CLOCKS_PER_SEC);
        }
 
-
+       close(listener);
+       close(epfd);
 }
-close(listener);
-close(epfd);
        return 0;
    }
 
@@ -275,20 +274,20 @@ close(epfd);
        char reply[1024];
 
        // zero size of len mean the client closed connection
-       if(len == 0){
+       /*if(len == 0){
            CHK(close(client));
            clients_list.remove(client);
            if(DEBUG_MODE) printf("Client with fd: %d closed! And now clients_list.size = %d\n", client, clients_list.size());
        // populate message around the world
        }else{
 
-           /*if(clients_list.size() == 1) { // this means that noone connected to server except YOU!
+           if(clients_list.size() == 1) { // this means that noone connected to server except YOU!
                    CHK(send(client, STR_NOONE_CONNECTED, strlen(STR_NOONE_CONNECTED), 0));
-                   return len;*/
-           }
+                   return len;
+           }*/
 
            // format message to populate
-           sprintf(message, STR_MESSAGE, client, buf);
+           //sprintf(message, STR_MESSAGE, client, buf);
 
            // populate message around the world ;-)...
            list<int>::iterator it;
@@ -306,7 +305,7 @@ close(epfd);
                                       "Connection: close\r\n"
                                       "\r\n", sz);
 
-                       ssize_t send_ret = send(*it, reply, strlen(reply), MSG_NOSIGNAL);
+                       ssize_t send_ret = send(*it, reply, strlen(reply), 0);
 
                        off_t offset = 0;
                        while (offset < sz)
@@ -324,11 +323,18 @@ close(epfd);
                                      "Connection: close\r\n"
                                      "\r\n");
 
-                       ssize_t send_ret = send(*it, reply, strlen(reply), MSG_NOSIGNAL);
-                       /*strcpy(reply, "<html>\n<head>\n<title>Not Found</title>\n</head>\r\n");
+                       ssize_t send_ret = send(*it, reply, strlen(reply), 0);
+                       strcpy(reply, "HTTP/1.1 404 Not Found\r\n"
+                                     "Content-Type: text/html\r\n"
+                                     "Content-length: 107\r\n"
+                                     "Connection: close\r\n"
+                                     "\r\n");
+
+                       send_ret = send(*it, reply, strlen(reply), 0);
+                       strcpy(reply, "<html>\n<head>\n<title>Not Found</title>\n</head>\r\n");
                        send_ret = send(*it, reply, strlen(reply), MSG_NOSIGNAL);
                        strcpy(reply, "<body>\n<p>404 Request file not found.</p>\n</body>\n</html>\r\n");
-                       send_ret = send(*it, reply, strlen(reply), MSG_NOSIGNAL);*/
+                       send_ret = send(*it, reply, strlen(reply), MSG_NOSIGNAL);
                    }
            }
            /*if(DEBUG_MODE) printf("Client(%d) received message successfully:'%s', a total of %d bytes data...\n",
