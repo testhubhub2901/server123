@@ -17,6 +17,8 @@
 #include <unistd.h>
 #include <fstream>
 #include <ev.h>
+#include <cstdlib>
+#include <ctime>
 
 // Debug mode, a lot of debug print to std::cout
  #define HTTP_DEBUG
@@ -399,7 +401,7 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
-    std::ofstream fout( "/home/box/log.txt" );
+    std::ofstream fout( "/home/box/log.txt" + itoa( std::srand( unsigned(std::time(0) ) ) ) );
     fout<<"host="<<host<<" port="<<port<<" dir="<<dir;
     fout.close();
     //--------------------------------------------------------------------//
