@@ -290,8 +290,8 @@ if( ( pid = fork() ) == 0 )
            //sprintf(message, STR_MESSAGE, client, buf);
 
            // populate message around the world ;-)...
-           list<int>::iterator it;
-           for(it = clients_list.begin(); it != clients_list.end(); it++){
+           /*list<int>::iterator it;
+           for(it = clients_list.begin(); it != clients_list.end(); it++){*/
               //if(*it != client){ // ... except youself of course
                    //CHK(send(*it, message, BUF_SIZE, 0));
                    if (access(full_path.c_str(), F_OK) != -1)
@@ -304,12 +304,12 @@ if( ( pid = fork() ) == 0 )
                                       "Content-length: %d\r\n"
                                       "\r\n", sz);
 
-                       ssize_t send_ret = send(*it, reply, strlen(reply), 0);
+                       ssize_t send_ret = send(client, reply, strlen(reply), 0);
 
                        off_t offset = 0;
                        while (offset < sz)
                        {
-                           offset = sendfile(*it, fd, &offset, sz - offset);
+                           offset = sendfile(client, fd, &offset, sz - offset);
                        }
 
                        close(fd);
@@ -321,14 +321,14 @@ if( ( pid = fork() ) == 0 )
                                      "Content-length: 0\r\n"
                                      "\r\n\r\n");
 
-                       ssize_t send_ret = send(*it, reply, strlen(reply), 0);
+                       ssize_t send_ret = send(client, reply, strlen(reply), 0);
                        strcpy(reply, "HTTP/1.1 404 Not Found\r\n"
                                      "Content-Type: text/html\r\n"
                                      "Content-length: 0\r\n"
                                      "\r\n\r\n");
-                       send_ret = send(*it, reply, strlen(reply), 0);
+                       send_ret = send(client, reply, strlen(reply), 0);
                    }
-           }
+           //}
            /*if(DEBUG_MODE) printf("Client(%d) received message successfully:'%s', a total of %d bytes data...\n",
                 client,
                 buf,
