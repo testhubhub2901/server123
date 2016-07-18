@@ -234,14 +234,14 @@ if( ( pid = fork() ) == 0 )
                                                clients_list.size());
 
                            // send initial welcome message to client
-                            bzero(message, BUF_SIZE);
+                            //bzero(message, BUF_SIZE);
                            /*res = sprintf(message, STR_WELCOME, client);
                            CHK2(res, send(client, message, BUF_SIZE, 0));*/
-                            CHK2(res,handle_message(events[i].data.fd));
+                            //CHK2(res,handle_message(events[i].data.fd));
 
-                   }/*else { // EPOLLIN event for others(new incoming message from client)
+                   }else { // EPOLLIN event for others(new incoming message from client)
                            CHK2(res,handle_message(events[i].data.fd));
-                   }*/
+                   }
            }
            // print epoll events handling statistics
            printf("Statistics: %d events handled at: %.2f second(s)\n",
