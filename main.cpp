@@ -364,8 +364,8 @@ int main(int argc, char* argv[])
     //}
 
     // Allocate semaphore and initialize it as shared
-    locker = new sem_t;
-    sem_init(locker, 1, 1);
+    //locker = new sem_t;
+    //sem_init(locker, 1, 1);
 
 #ifdef HTTP_DEBUG
     std::cout << "main begin, parent pid is " << getpid() << std::endl;
