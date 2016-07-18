@@ -233,7 +233,8 @@ if( ( pid = fork() ) == 0 )
 
                            // send initial welcome message to client
                             bzero(message, BUF_SIZE);
-                            CHK2(res,handle_message(events[i].data.fd));
+                           /*res = sprintf(message, STR_WELCOME, client);
+                           CHK2(res, send(client, message, BUF_SIZE, 0));*/
 
                    }else { // EPOLLIN event for others(new incoming message from client)
                            CHK2(res,handle_message(events[i].data.fd));
