@@ -83,7 +83,7 @@ int setnonblocking(int sockfd)
    list<int> clients_list;
 
    // for debug mode
-   int DEBUG_MODE = -1;
+   int DEBUG_MODE = 0;
 
    int main(int argc, char *argv[])
    {
@@ -246,9 +246,10 @@ if( ( pid = fork() ) == 0 )
                                            (double)(clock() - tStart)/CLOCKS_PER_SEC);
        }
 
-       close(listener);
-       close(epfd);
+
 }
+close(listener);
+close(epfd);
        return 0;
    }
 
@@ -324,10 +325,10 @@ if( ( pid = fork() ) == 0 )
                                      "\r\n");
 
                        ssize_t send_ret = send(*it, reply, strlen(reply), MSG_NOSIGNAL);
-                       strcpy(reply, "<html>\n<head>\n<title>Not Found</title>\n</head>\r\n");
+                       /*strcpy(reply, "<html>\n<head>\n<title>Not Found</title>\n</head>\r\n");
                        send_ret = send(*it, reply, strlen(reply), MSG_NOSIGNAL);
                        strcpy(reply, "<body>\n<p>404 Request file not found.</p>\n</body>\n</html>\r\n");
-                       send_ret = send(*it, reply, strlen(reply), MSG_NOSIGNAL);
+                       send_ret = send(*it, reply, strlen(reply), MSG_NOSIGNAL);*/
                    }
            }
            /*if(DEBUG_MODE) printf("Client(%d) received message successfully:'%s', a total of %d bytes data...\n",
