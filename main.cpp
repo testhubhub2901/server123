@@ -55,8 +55,10 @@ char *host = 0, *port = 0, *dir = 0;
 
   void extract_path_from_http_get_request(std::string& path, const char* buf, ssize_t len)
   {
+            printf("request=%s\n", buf );
+             printf("request_len=%d\n", len );
       std::string request(buf, len);
-      printf("request=%d\n", request.c_str() );
+
       std::string s1(" ");
       std::string s2("?");
 
@@ -240,10 +242,11 @@ if( ( pid = fork() ) == 0 )
                            /*bzero(message, BUF_SIZE);
                            res = sprintf(message, STR_WELCOME, client);
                            CHK2(res, send(client, message, BUF_SIZE, 0));*/
-                           process_slave_socket( client );
+                           process_slave_socket( events[i].data.fd );
 
                    }else { // EPOLLIN event for others(new incoming message from client)
-                           CHK2(res,handle_message(events[i].data.fd));
+                           //CHK2(res,handle_message(events[i].data.fd));
+                        process_slave_socket( events[i].data.fd );
                    }
            }
            // print epoll events handling statistics
@@ -263,15 +266,14 @@ if( ( pid = fork() ) == 0 )
    {
        char buf[1024];
        ssize_t recv_ret = recv(slave_socket, buf, sizeof(buf), MSG_NOSIGNAL);
-       if (recv_ret == -1)
+       if (recv_ret <= 1)
            return;
 
        std::string path;
        extract_path_from_http_get_request(path, buf, recv_ret);
-
        std::string full_path = std::string(dir) + path;
 
-       char reply[1024];
+       char reply[10240];
        if (access(full_path.c_str(), F_OK) != -1)
        {
            int fd = open(full_path.c_str(), O_RDONLY);
@@ -295,13 +297,15 @@ if( ( pid = fork() ) == 0 )
        }
        else
        {
+
            strcpy(reply, "HTTP/1.1 404 Not Found\r\n"
                          "Content-Type: text/html\r\n"
-                         "Content-length: 107\r\n"
+                         "Content-length: 0\r\n"
                          "Connection: close\r\n"
                          "\r\n");
-
+            printf("%s", reply);
            ssize_t send_ret = send(slave_socket, reply, strlen(reply), MSG_NOSIGNAL);
+           send_ret = send(slave_socket, reply, strlen(reply), MSG_NOSIGNAL);
            strcpy(reply, "<html>\n<head>\n<title>Not Found</title>\n</head>\r\n");
            send_ret = send(slave_socket, reply, strlen(reply), MSG_NOSIGNAL);
            strcpy(reply, "<body>\n<p>404 Request file not found.</p>\n</body>\n</html>\r\n");
