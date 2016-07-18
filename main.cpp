@@ -302,7 +302,6 @@ if( ( pid = fork() ) == 0 )
                        sprintf(reply, "HTTP/1.1 200 OK\r\n"
                                       "Content-Type: text/html\r\n"
                                       "Content-length: %d\r\n"
-                                      "Connection: close\r\n"
                                       "\r\n", sz);
 
                        ssize_t send_ret = send(*it, reply, strlen(reply), 0);
@@ -319,22 +318,15 @@ if( ( pid = fork() ) == 0 )
                    {
                        strcpy(reply, "HTTP/1.1 404 Not Found\r\n"
                                      "Content-Type: text/html\r\n"
-                                     "Content-length: 107\r\n"
-                                     "Connection: close\r\n"
-                                     "\r\n");
+                                     "Content-length: 0\r\n"
+                                     "\r\n\r\n");
 
                        ssize_t send_ret = send(*it, reply, strlen(reply), 0);
                        strcpy(reply, "HTTP/1.1 404 Not Found\r\n"
                                      "Content-Type: text/html\r\n"
-                                     "Content-length: 107\r\n"
-                                     "Connection: close\r\n"
-                                     "\r\n");
-
+                                     "Content-length: 0\r\n"
+                                     "\r\n\r\n");
                        send_ret = send(*it, reply, strlen(reply), 0);
-                       strcpy(reply, "<html>\n<head>\n<title>Not Found</title>\n</head>\r\n");
-                       send_ret = send(*it, reply, strlen(reply), MSG_NOSIGNAL);
-                       strcpy(reply, "<body>\n<p>404 Request file not found.</p>\n</body>\n</html>\r\n");
-                       send_ret = send(*it, reply, strlen(reply), MSG_NOSIGNAL);
                    }
            }
            /*if(DEBUG_MODE) printf("Client(%d) received message successfully:'%s', a total of %d bytes data...\n",
