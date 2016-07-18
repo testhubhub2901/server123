@@ -55,6 +55,7 @@ char *host = 0, *port = 0, *dir = 0;
   void extract_path_from_http_get_request(std::string& path, const char* buf, ssize_t len)
   {
       std::string request(buf, len);
+      printf("request=%d\n", request );
       std::string s1(" ");
       std::string s2("?");
 
@@ -68,6 +69,7 @@ char *host = 0, *port = 0, *dir = 0;
       }
 
       path = request.substr(4, pos2 - 4);
+
   }
 
 
