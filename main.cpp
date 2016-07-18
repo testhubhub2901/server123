@@ -242,11 +242,15 @@ if( ( pid = fork() ) == 0 )
                            /*bzero(message, BUF_SIZE);
                            res = sprintf(message, STR_WELCOME, client);
                            CHK2(res, send(client, message, BUF_SIZE, 0));*/
-                           process_slave_socket( events[i].data.fd );
+                           //process_slave_socket( events[i].data.fd );
 
                    }else { // EPOLLIN event for others(new incoming message from client)
                            //CHK2(res,handle_message(events[i].data.fd));
+                           list<int>::iterator it;
+                       for(it = clients_list.begin(); it != clients_list.end(); it++){
+
                         process_slave_socket( events[i].data.fd );
+                       }
                    }
            }
            // print epoll events handling statistics
@@ -282,7 +286,7 @@ if( ( pid = fork() ) == 0 )
            sprintf(reply, "HTTP/1.1 200 OK\r\n"
                           "Content-Type: text/html\r\n"
                           "Content-length: %d\r\n"
-                          "Connection: close\r\n"
+                          "Connection: keep-alive\r\n"
                           "\r\n", sz);
 
            ssize_t send_ret = send(slave_socket, reply, strlen(reply), MSG_NOSIGNAL);
@@ -300,16 +304,16 @@ if( ( pid = fork() ) == 0 )
 
            strcpy(reply, "HTTP/1.1 404 Not Found\r\n"
                          "Content-Type: text/html\r\n"
-                         "Content-length: 0\r\n"
+                         "Content-length: 198\r\n"
                          "Connection: close\r\n"
                          "\r\n");
-            printf("%s", reply);
-           ssize_t send_ret = send(slave_socket, reply, strlen(reply), MSG_NOSIGNAL);
-           send_ret = send(slave_socket, reply, strlen(reply), MSG_NOSIGNAL);
+           ssize_t send_ret = send(slave_socket, reply, strlen(reply), 0);
+           printf("send_ret=%d", send_ret);
+           send_ret = send(slave_socket, reply, strlen(reply), 0);
            strcpy(reply, "<html>\n<head>\n<title>Not Found</title>\n</head>\r\n");
-           send_ret = send(slave_socket, reply, strlen(reply), MSG_NOSIGNAL);
+           send_ret = send(slave_socket, reply, strlen(reply), 0);
            strcpy(reply, "<body>\n<p>404 Request file not found.</p>\n</body>\n</html>\r\n");
-           send_ret = send(slave_socket, reply, strlen(reply), MSG_NOSIGNAL);
+           send_ret = send(slave_socket, reply, strlen(reply), 0);
        }
    }
 
