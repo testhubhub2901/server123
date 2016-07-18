@@ -454,7 +454,7 @@ int main(int argc, char* argv[])
     if (bind(master_socket, (struct sockaddr* )&addr, sizeof(addr)) == -1)
     {
         printf("bind return -1, %s\n", strerror(errno));
-        exit(3);
+        //exit(3);
     }
 
 
