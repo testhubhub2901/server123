@@ -41,10 +41,10 @@ char *host = 0, *port = 0, *dir = 0;
   #define CMD_EXIT "EXIT"
 
   // Macros - exit in any error (eval < 0) case
-  #define CHK(eval) if(eval < 0){perror("eval"); exit(-1);}
+  #define CHK(eval) if(eval < 0){perror("eval"); /*exit(-1);*/}
 
   // Macros - same as above, but save the result(res) of expression(eval)
-  #define CHK2(res, eval) if((res = eval) < 0){perror("eval"); exit(-1);}
+  #define CHK2(res, eval) if((res = eval) < 0){perror("eval"); /*exit(-1);*/}
 
   // Preliminary declaration of functions
   int setnonblocking(int sockfd);
